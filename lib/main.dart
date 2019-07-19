@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:data_connection_checker/data_connection_checker.dart';
 
 void main() {
   runApp(MyApp());
@@ -26,13 +29,63 @@ class _HomeScreenState extends State<HomeScreen> {
   TextEditingController _nameController = TextEditingController();
   var result;
 
-  predictGender(String name) async {
-    var url = "https://api.genderize.io/?name=$name";
-    var res = await http.get(url);
-    var body = jsonDecode(res.body);
+  StreamSubscription<DataConnectionStatus> listener;
 
-    result = "Gender: ${body['gender']}, Probability: ${body['probability']}";
-    setState(() {});
+  predictGender(String name) async {
+    DataConnectionStatus status = await checkInternet();
+    if (status == DataConnectionStatus.connected) {
+      var url = "https://api.genderize.io/?name=$name";
+      var res = await http.get(url);
+      var body = jsonDecode(res.body);
+
+      result = "Gender: ${body['gender']}, Probability: ${body['probability']}";
+      setState(() {});
+    } else {
+      showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: Text("No Internet"),
+                content: Text("Check your internet connection."),
+              ));
+    }
+  }
+
+  @override
+  void dispose() {
+    listener.cancel();
+    super.dispose();
+  }
+
+  checkInternet() async {
+    print("The statement 'this machine is connected to the Internet' is: ");
+    print(await DataConnectionChecker().hasConnection);
+    // returns a bool
+
+    // We can also get an enum value instead of a bool
+    print("Current status: ${await DataConnectionChecker().connectionStatus}");
+    // prints either DataConnectionStatus.connected
+    // or DataConnectionStatus.disconnected
+
+    // This returns the last results from the last call
+    // to either hasConnection or connectionStatus
+    print("Last results: ${DataConnectionChecker().lastTryResults}");
+
+    // actively listen for status updates
+    // this will cause DataConnectionChecker to check periodically
+    // with the interval specified in DataConnectionChecker().checkInterval
+    // until listener.cancel() is called
+    listener = DataConnectionChecker().onStatusChange.listen((status) {
+      switch (status) {
+        case DataConnectionStatus.connected:
+          print('Data connection is available.');
+          break;
+        case DataConnectionStatus.disconnected:
+          print('You are disconnected from the internet.');
+          break;
+      }
+    });
+
+    return await DataConnectionChecker().connectionStatus;
   }
 
   @override
